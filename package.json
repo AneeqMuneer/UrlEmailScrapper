@@ -1,0 +1,26 @@
+{
+  "name": "urlemailscrapper",
+  "version": "1.0.0",
+  "description": "A node.js mini project for scraping email addresses from provided urls in a CSV file",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start": "node server.js",
+    "dev": "nodemon server.js"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/AneeqMuneer/UrlEmailScrapper.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/AneeqMuneer/UrlEmailScrapper/issues"
+  },
+  "homepage": "https://github.com/AneeqMuneer/UrlEmailScrapper#readme",
+  "dependencies": {
+    "express": "^5.1.0"
+  }
+}
