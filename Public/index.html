@@ -1,0 +1,773 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Email Scraper - Find Emails & Contact Forms</title>
+    <link
+      href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css"
+      rel="stylesheet"
+    />
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Courier New", monospace;
+        background: #0a0a0a;
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 20px;
+        position: relative;
+        overflow-x: hidden;
+      }
+
+      /* Cyberpunk background effects */
+      body::before {
+        content: "";
+        position: fixed;
+        top: 0;
+        left: 0;
+        width: 100%;
+        height: 100%;
+        background: radial-gradient(
+            circle at 20% 80%,
+            rgba(0, 255, 255, 0.1) 0%,
+            transparent 50%
+          ),
+          radial-gradient(
+            circle at 80% 20%,
+            rgba(255, 0, 255, 0.1) 0%,
+            transparent 50%
+          ),
+          radial-gradient(
+            circle at 40% 40%,
+            rgba(0, 255, 0, 0.05) 0%,
+            transparent 50%
+          );
+        pointer-events: none;
+        z-index: -1;
+      }
+
+      .container {
+        background: rgba(20, 20, 20, 0.95);
+        border: 2px solid #00ffff;
+        border-radius: 15px;
+        box-shadow: 0 0 30px rgba(0, 255, 255, 0.3),
+          inset 0 0 30px rgba(0, 255, 255, 0.1);
+        padding: 40px;
+        width: 100%;
+        max-width: 800px;
+        text-align: center;
+        backdrop-filter: blur(10px);
+      }
+
+      .logo {
+        font-size: 2.5rem;
+        font-weight: bold;
+        color: #00ffff;
+        text-shadow: 0 0 20px #00ffff;
+        margin-bottom: 10px;
+        font-family: "Courier New", monospace;
+      }
+
+      .subtitle {
+        color: #888;
+        margin-bottom: 40px;
+        font-size: 1.1rem;
+        text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+      }
+
+      .search-container {
+        display: flex;
+        gap: 15px;
+        margin-bottom: 40px;
+        justify-content: center;
+        align-items: center;
+      }
+
+      .search-input {
+        flex: 1;
+        max-width: 500px;
+        padding: 15px 20px;
+        background: rgba(10, 10, 10, 0.8);
+        border: 2px solid #333;
+        border-radius: 10px;
+        font-size: 1rem;
+        outline: none;
+        transition: all 0.3s ease;
+        color: #fff;
+        font-family: "Courier New", monospace;
+      }
+
+      .search-input:focus {
+        border-color: #00ffff;
+        box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+      }
+
+      .search-input::placeholder {
+        color: #666;
+      }
+
+      .scrape-btn {
+        padding: 15px 30px;
+        background: linear-gradient(45deg, #00ffff, #ff00ff);
+        color: #000;
+        border: none;
+        border-radius: 10px;
+        font-size: 1rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        opacity: 0.5;
+        pointer-events: none;
+        font-family: "Courier New", monospace;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .scrape-btn.active {
+        opacity: 1;
+        pointer-events: all;
+        box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+      }
+
+      .scrape-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0 30px rgba(0, 255, 255, 0.8);
+      }
+
+      .scrape-btn:disabled {
+        opacity: 0.7;
+        cursor: not-allowed;
+        transform: none;
+      }
+
+      /* Download button */
+      .download-btn {
+        display: none;
+        padding: 12px 25px;
+        background: linear-gradient(45deg, #00ff00, #00ffff);
+        color: #000;
+        border: none;
+        border-radius: 10px;
+        font-size: 0.9rem;
+        font-weight: bold;
+        cursor: pointer;
+        transition: all 0.3s ease;
+        font-family: "Courier New", monospace;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        margin-top: 20px;
+        box-shadow: 0 0 20px rgba(0, 255, 0, 0.3);
+      }
+
+      .download-btn:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0 30px rgba(0, 255, 0, 0.6);
+      }
+
+      .download-btn i {
+        margin-right: 8px;
+      }
+
+      /* Loader */
+      .loader {
+        display: none;
+        margin: 40px auto;
+        text-align: center;
+      }
+
+      .loader-spinner {
+        width: 60px;
+        height: 60px;
+        border: 4px solid #333;
+        border-top: 4px solid #00ffff;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 20px;
+        box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .loader-text {
+        color: #00ffff;
+        font-size: 1.1rem;
+        text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+      }
+
+      /* Stats */
+      .stats {
+        display: none;
+        background: rgba(10, 10, 10, 0.8);
+        border: 1px solid #00ffff;
+        border-radius: 15px;
+        padding: 20px;
+        margin: 30px 0;
+        box-shadow: 0 0 20px rgba(0, 255, 255, 0.2);
+      }
+
+      .stats-grid {
+        display: grid;
+        grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+        gap: 20px;
+      }
+
+      .stat-item {
+        text-align: center;
+      }
+
+      .stat-number {
+        font-size: 2rem;
+        font-weight: bold;
+        color: #00ffff;
+        text-shadow: 0 0 15px #00ffff;
+      }
+
+      .stat-label {
+        color: #888;
+        font-size: 0.9rem;
+        margin-top: 5px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      /* Results */
+      .results {
+        display: none;
+        margin-top: 30px;
+      }
+
+      .result-section {
+        margin-bottom: 30px;
+        text-align: left;
+      }
+
+      .section-title {
+        font-size: 1.3rem;
+        font-weight: 600;
+        color: #00ffff;
+        margin-bottom: 15px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
+        text-transform: uppercase;
+        letter-spacing: 1px;
+      }
+
+      .section-title i {
+        color: #ff00ff;
+        text-shadow: 0 0 10px rgba(255, 0, 255, 0.5);
+      }
+
+      .email-list,
+      .contact-list {
+        background: rgba(10, 10, 10, 0.8);
+        border: 1px solid #333;
+        border-radius: 10px;
+        padding: 20px;
+        max-height: 300px;
+        overflow-y: auto;
+      }
+
+      .email-item,
+      .contact-item {
+        background: rgba(20, 20, 20, 0.8);
+        padding: 12px 15px;
+        margin-bottom: 8px;
+        border-radius: 8px;
+        border-left: 4px solid #00ffff;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        transition: all 0.3s ease;
+        color: #fff;
+      }
+
+      .email-item:hover,
+      .contact-item:hover {
+        transform: translateX(5px);
+        box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+        background: rgba(30, 30, 30, 0.9);
+      }
+
+      .email-item i,
+      .contact-item i {
+        color: #ff00ff;
+        text-shadow: 0 0 10px rgba(255, 0, 255, 0.5);
+      }
+
+      .contact-item a {
+        color: #00ffff;
+        text-decoration: none;
+        text-shadow: 0 0 5px rgba(0, 255, 255, 0.5);
+      }
+
+      .contact-item a:hover {
+        color: #ff00ff;
+        text-shadow: 0 0 10px rgba(255, 0, 255, 0.5);
+      }
+
+      .no-results {
+        text-align: center;
+        color: #666;
+        font-style: italic;
+        padding: 20px;
+      }
+
+      /* Popup */
+      .popup {
+        display: none;
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        background: rgba(20, 20, 20, 0.95);
+        border: 2px solid #00ffff;
+        border-radius: 10px;
+        padding: 20px;
+        box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
+        z-index: 1000;
+        max-width: 350px;
+        animation: slideIn 0.3s ease;
+        backdrop-filter: blur(10px);
+      }
+
+      @keyframes slideIn {
+        from {
+          transform: translateX(100%);
+          opacity: 0;
+        }
+        to {
+          transform: translateX(0);
+          opacity: 1;
+        }
+      }
+
+      .popup.success {
+        border-color: #00ff00;
+        box-shadow: 0 0 30px rgba(0, 255, 0, 0.3);
+      }
+
+      .popup.warning {
+        border-color: #ffaa00;
+        box-shadow: 0 0 30px rgba(255, 170, 0, 0.3);
+      }
+
+      .popup-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 10px;
+      }
+
+      .popup-title {
+        font-weight: bold;
+        color: #fff;
+        font-size: 1.1rem;
+      }
+
+      .popup.success .popup-title {
+        color: #00ff00;
+        text-shadow: 0 0 10px rgba(0, 255, 0, 0.5);
+      }
+
+      .popup.warning .popup-title {
+        color: #ffaa00;
+        text-shadow: 0 0 10px rgba(255, 170, 0, 0.5);
+      }
+
+      .popup-message {
+        color: #ccc;
+        font-size: 0.9rem;
+        line-height: 1.4;
+      }
+
+      .popup-close {
+        background: none;
+        border: none;
+        color: #666;
+        font-size: 1.2rem;
+        cursor: pointer;
+        padding: 0;
+        width: 20px;
+        height: 20px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: color 0.3s ease;
+      }
+
+      .popup-close:hover {
+        color: #00ffff;
+      }
+
+      /* Scrollbar styling */
+      .email-list::-webkit-scrollbar,
+      .contact-list::-webkit-scrollbar {
+        width: 8px;
+      }
+
+      .email-list::-webkit-scrollbar-track,
+      .contact-list::-webkit-scrollbar-track {
+        background: rgba(10, 10, 10, 0.8);
+        border-radius: 4px;
+      }
+
+      .email-list::-webkit-scrollbar-thumb,
+      .contact-list::-webkit-scrollbar-thumb {
+        background: #00ffff;
+        border-radius: 4px;
+      }
+
+      .email-list::-webkit-scrollbar-thumb:hover,
+      .contact-list::-webkit-scrollbar-thumb:hover {
+        background: #ff00ff;
+      }
+
+      /* Responsive */
+      @media (max-width: 768px) {
+        .container {
+          padding: 20px;
+        }
+
+        .search-container {
+          flex-direction: column;
+        }
+
+        .search-input {
+          max-width: 100%;
+        }
+
+        .stats-grid {
+          grid-template-columns: 1fr;
+        }
+
+        .popup {
+          right: 10px;
+          left: 10px;
+          max-width: none;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="logo"><i class="fas fa-envelope"></i> EMAIL SCRAPER</div>
+      <p class="subtitle">Find emails and contact forms from any website</p>
+
+      <div class="search-container">
+        <input
+          type="text"
+          class="search-input"
+          placeholder="Enter website URL (e.g., example.com)"
+          id="urlInput"
+        />
+        <button class="scrape-btn" id="scrapeBtn">
+          <i class="fas fa-search"></i> SCRAPE
+        </button>
+      </div>
+
+      <div class="loader" id="loader">
+        <div class="loader-spinner"></div>
+        <p class="loader-text">
+          Scraping website for emails and contact forms...
+        </p>
+      </div>
+
+      <div class="stats" id="stats">
+        <div class="stats-grid">
+          <div class="stat-item">
+            <div class="stat-number" id="pagesScanned">0</div>
+            <div class="stat-label">Pages Scanned</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number" id="emailsFound">0</div>
+            <div class="stat-label">Emails Found</div>
+          </div>
+          <div class="stat-item">
+            <div class="stat-number" id="contactForms">0</div>
+            <div class="stat-label">Contact Forms</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="results" id="results">
+        <div class="result-section">
+          <h3 class="section-title">
+            <i class="fas fa-envelope"></i>
+            Emails Found
+          </h3>
+          <div class="email-list" id="emailList">
+            <!-- Emails will be populated here -->
+          </div>
+        </div>
+
+        <div class="result-section">
+          <h3 class="section-title">
+            <i class="fas fa-address-book"></i>
+            Contact Form URLs
+          </h3>
+          <div class="contact-list" id="contactList">
+            <!-- Contact forms will be populated here -->
+          </div>
+        </div>
+
+        <button class="download-btn" id="downloadBtn">
+          <i class="fas fa-download"></i>
+          Download CSV
+        </button>
+      </div>
+    </div>
+
+    <div class="popup" id="popup">
+      <div class="popup-header">
+        <div class="popup-title" id="popupTitle"></div>
+        <button class="popup-close" id="popupClose">
+          <i class="fas fa-times"></i>
+        </button>
+      </div>
+      <div class="popup-message" id="popupMessage"></div>
+    </div>
+
+    <script>
+      const urlInput = document.getElementById("urlInput");
+      const scrapeBtn = document.getElementById("scrapeBtn");
+      const loader = document.getElementById("loader");
+      const stats = document.getElementById("stats");
+      const results = document.getElementById("results");
+      const emailList = document.getElementById("emailList");
+      const contactList = document.getElementById("contactList");
+      const popup = document.getElementById("popup");
+      const popupClose = document.getElementById("popupClose");
+      const downloadBtn = document.getElementById("downloadBtn");
+
+      // Enable/disable scrape button based on input
+      urlInput.addEventListener("input", function () {
+        if (this.value.trim()) {
+          scrapeBtn.classList.add("active");
+        } else {
+          scrapeBtn.classList.remove("active");
+        }
+      });
+
+      // Close popup
+      popupClose.addEventListener("click", function () {
+        popup.style.display = "none";
+      });
+
+      // Scrape button click handler
+      scrapeBtn.addEventListener("click", async function () {
+        const url = urlInput.value.trim();
+        if (!url) return;
+
+        // Show loader and disable button
+        loader.style.display = "block";
+        results.style.display = "none";
+        stats.style.display = "none";
+        scrapeBtn.disabled = true;
+        scrapeBtn.innerHTML = "SCRAPING...";
+
+        try {
+          const response = await fetch("/Scrapper/ScrapEmails", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ Url: url }),
+          });
+
+          const data = await response.json();
+
+          // Hide loader
+          loader.style.display = "none";
+          scrapeBtn.disabled = false;
+          scrapeBtn.innerHTML = '<i class="fas fa-search"></i> SCRAPE';
+
+          // Show popup based on completion status
+          showPopup(data.data.isComplete, data.message, data.data);
+
+          // Update stats with unique email count
+          updateStats(data.data);
+
+          // Show results
+          displayResults(data.data);
+        } catch (error) {
+          console.error("Error:", error);
+          loader.style.display = "none";
+          scrapeBtn.disabled = false;
+          scrapeBtn.innerHTML = '<i class="fas fa-search"></i> SCRAPE';
+          showPopup(
+            false,
+            "An error occurred while scraping the website.",
+            null
+          );
+        }
+      });
+
+      function showPopup(isComplete, message, data) {
+        const popupTitle = document.getElementById("popupTitle");
+        const popupMessage = document.getElementById("popupMessage");
+
+        popup.className = "popup " + (isComplete ? "success" : "warning");
+        popupTitle.textContent = isComplete
+          ? "SCRAPING COMPLETE!"
+          : "PARTIAL RESULTS";
+
+        // Calculate unique email count for popup message
+        let uniqueEmailCount = 0;
+        if (data) {
+          const uniqueEmails = new Set();
+          Object.values(data.emailsByPage).forEach((emails) => {
+            emails.forEach((email) => uniqueEmails.add(email));
+          });
+          uniqueEmailCount = uniqueEmails.size;
+        }
+
+        // Update message with unique email count
+        const updatedMessage = message.replace(
+          /\d+ emails/,
+          `${uniqueEmailCount} emails`
+        );
+        popupMessage.textContent = updatedMessage;
+
+        popup.style.display = "block";
+      }
+
+      function updateStats(data) {
+        // Count unique emails
+        const uniqueEmails = new Set();
+        Object.values(data.emailsByPage).forEach((emails) => {
+          emails.forEach((email) => uniqueEmails.add(email));
+        });
+
+        document.getElementById("pagesScanned").textContent = data.totalPages;
+        document.getElementById("emailsFound").textContent = uniqueEmails.size;
+        document.getElementById("contactForms").textContent =
+          data.totalContactForms;
+        stats.style.display = "block";
+      }
+
+      function displayResults(data) {
+        // Display emails (unique only)
+        const uniqueEmails = new Set();
+        Object.values(data.emailsByPage).forEach((emails) => {
+          emails.forEach((email) => uniqueEmails.add(email));
+        });
+
+        if (uniqueEmails.size > 0) {
+          emailList.innerHTML = Array.from(uniqueEmails)
+            .map(
+              (email) => `
+                    <div class="email-item">
+                        <i class="fas fa-envelope"></i>
+                        <span>${email}</span>
+                    </div>
+                `
+            )
+            .join("");
+        } else {
+          emailList.innerHTML =
+            '<div class="no-results">No emails found on this website</div>';
+        }
+
+        // Display contact forms
+        if (data.contactFormUrls && data.contactFormUrls.length > 0) {
+          contactList.innerHTML = data.contactFormUrls
+            .map(
+              (url) => `
+                    <div class="contact-item">
+                        <i class="fas fa-address-book"></i>
+                        <a href="${url}" target="_blank">${url}</a>
+                    </div>
+                `
+            )
+            .join("");
+        } else {
+          contactList.innerHTML =
+            '<div class="no-results">No contact forms found on this website</div>';
+        }
+
+        results.style.display = "block";
+
+        // Show download button if there are results
+        if (
+          uniqueEmails.size > 0 ||
+          (data.contactFormUrls && data.contactFormUrls.length > 0)
+        ) {
+          downloadBtn.style.display = "inline-block";
+        }
+      }
+
+      // Download button click handler
+      downloadBtn.addEventListener("click", function () {
+        downloadCSV();
+      });
+
+      // Enter key to trigger scrape
+      urlInput.addEventListener("keypress", function (e) {
+        if (e.key === "Enter" && this.value.trim()) {
+          scrapeBtn.click();
+        }
+      });
+
+      // Function to download CSV
+      function downloadCSV() {
+        const url = urlInput.value.trim();
+        const uniqueEmails = new Set();
+        const contactUrls = [];
+
+        // Get unique emails from the displayed results
+        const emailItems = emailList.querySelectorAll(".email-item span");
+        emailItems.forEach((item) => uniqueEmails.add(item.textContent));
+
+        // Get contact URLs from the displayed results
+        const contactItems = contactList.querySelectorAll(".contact-item a");
+        contactItems.forEach((item) => contactUrls.push(item.href));
+
+        // Create CSV content
+        let csvContent = "data:text/csv;charset=utf-8,";
+        csvContent += "Website,Type,Value\n";
+
+        // Add emails
+        uniqueEmails.forEach((email) => {
+          csvContent += `"${url}","Email","${email}"\n`;
+        });
+
+        // Add contact forms
+        contactUrls.forEach((url) => {
+          csvContent += `"${urlInput.value.trim()}","Contact Form","${url}"\n`;
+        });
+
+        // Extract main domain name for filename
+        const domain = url
+          .replace(/^https?:\/\//, "")
+          .replace(/^www\./, "")
+          .split("/")[0];
+        const cleanDomain = domain.replace(/[^a-zA-Z0-9]/g, "");
+
+        // Create download link
+        const encodedUri = encodeURI(csvContent);
+        const link = document.createElement("a");
+        link.setAttribute("href", encodedUri);
+        link.setAttribute("download", `${cleanDomain} Scrapped Emails.csv`);
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+      }
+    </script>
+  </body>
+</html>
