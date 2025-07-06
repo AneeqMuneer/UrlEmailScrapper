@@ -2,7 +2,10 @@
   "name": "urlemailscrapper",
   "version": "1.0.0",
   "description": "A node.js mini project for scraping email addresses from provided urls in a CSV file",
-  "main": "index.js",
+  "main": "server.js",
+  "engines": {
+    "node": ">=14.0.0"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "start": "node server.js",
