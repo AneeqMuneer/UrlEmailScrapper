@@ -1,6 +1,7 @@
 const express = require("express");
 const app = express();
 const middleware = require("./Middleware/error");
+const cors = require("cors");
 
 app.use(cors({
     origin: "http://localhost:3000", // replace with your frontend url (use localhost originally and then the live one when deployed)
