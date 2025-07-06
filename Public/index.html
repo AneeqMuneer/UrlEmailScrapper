@@ -176,6 +176,15 @@
         margin-right: 8px;
       }
 
+      /* Cancel state for scrape button */
+      .scrape-btn.cancelling {
+        background: linear-gradient(45deg, #ff4444, #ff6666);
+        box-shadow: 0 0 20px rgba(255, 68, 68, 0.3);
+      }
+
+      .scrape-btn.cancelling:hover {
+        box-shadow: 0 0 30px rgba(255, 68, 68, 0.6);
+      }
       /* Loader */
       .loader {
         display: none;
@@ -555,6 +564,9 @@
       const popupClose = document.getElementById("popupClose");
       const downloadBtn = document.getElementById("downloadBtn");
 
+      // Global variable to store the current AbortController
+      let currentController = null;
+
       // Enable/disable scrape button based on input
       urlInput.addEventListener("input", function () {
         if (this.value.trim()) {
@@ -574,12 +586,25 @@
         const url = urlInput.value.trim();
         if (!url) return;
 
-        // Show loader and disable button
+        // Check if we're currently scraping (cancel mode)
+        if (scrapeBtn.classList.contains("cancelling")) {
+          // Cancel the request
+          if (currentController) {
+            currentController.abort();
+          }
+          return;
+        }
+
+        // Show loader and transform button to cancel
         loader.style.display = "block";
         results.style.display = "none";
         stats.style.display = "none";
-        scrapeBtn.disabled = true;
-        scrapeBtn.innerHTML = "SCRAPING...";
+        downloadBtn.style.display = "none";
+        scrapeBtn.classList.add("cancelling");
+        scrapeBtn.innerHTML = '<i class="fas fa-times"></i> CANCEL';
+
+        // Create AbortController for cancellation
+        currentController = new AbortController();
 
         try {
           const response = await fetch("/Scrapper/ScrapEmails", {
@@ -588,13 +613,14 @@
               "Content-Type": "application/json",
             },
             body: JSON.stringify({ Url: url }),
+            signal: currentController.signal,
           });
 
           const data = await response.json();
 
-          // Hide loader
+          // Hide loader and reset button
           loader.style.display = "none";
-          scrapeBtn.disabled = false;
+          scrapeBtn.classList.remove("cancelling");
           scrapeBtn.innerHTML = '<i class="fas fa-search"></i> SCRAPE';
 
           // Show popup based on completion status
@@ -607,14 +633,25 @@
           displayResults(data.data);
         } catch (error) {
           console.error("Error:", error);
+
+          // Hide loader and reset button
           loader.style.display = "none";
-          scrapeBtn.disabled = false;
+          scrapeBtn.classList.remove("cancelling");
           scrapeBtn.innerHTML = '<i class="fas fa-search"></i> SCRAPE';
-          showPopup(
-            false,
-            "An error occurred while scraping the website.",
-            null
-          );
+
+          if (error.name === "AbortError") {
+            showPopup(
+              false,
+              "An error occurred while scraping emails from this website.",
+              null
+            );
+          } else {
+            showPopup(
+              false,
+              "An error occurred while scraping emails from this website.",
+              null
+            );
+          }
         }
       });
 

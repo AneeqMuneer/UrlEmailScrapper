@@ -21,7 +21,6 @@ exports.ScrapEmails = catchAsyncError(async (req, res, next) => {
     const contactFormUrls = [];
     const errors = [];
     let isCompleted = false;
-    let timeoutId;
     let crawler;
 
     const exclude = ['gif', 'jpg', 'jpeg', 'png', 'ico', 'bmp', 'ogg', 'webp',
@@ -46,10 +45,15 @@ exports.ScrapEmails = catchAsyncError(async (req, res, next) => {
         if (isCompleted) return;
 
         isCompleted = true;
-        clearTimeout(timeoutId);
 
-        if (crawler && crawler.running) {
-            crawler.stop();
+        // Force stop the crawler
+        if (crawler) {
+            try {
+                crawler.stop();
+                console.log("Crawler stopped");
+            } catch (error) {
+                console.error("Error stopping crawler:", error);
+            }
         }
 
         const totalEmails = Object.values(emailsByPage).reduce((total, emails) => total + emails.length, 0);
@@ -69,6 +73,12 @@ exports.ScrapEmails = catchAsyncError(async (req, res, next) => {
         console.log(`Pages scanned: ${pages.join(', ')}`);
         console.log(`Contact forms found: ${contactFormUrls.join(', ')}`);
 
+        // Check if response has already been sent
+        if (res.headersSent) {
+            console.log("Response already sent, skipping");
+            return;
+        }
+
         res.status(200).json({
             success: true,
             data: {
@@ -85,11 +95,6 @@ exports.ScrapEmails = catchAsyncError(async (req, res, next) => {
         });
     };
 
-    timeoutId = setTimeout(() => {
-        console.log("Timeout reached - stopping crawler and sending partial results");
-        sendResponse(false);
-    }, 30000);
-
     crawler.on('fetchcomplete', function (item, responseBuffer, response) {
         try {
             const html = responseBuffer.toString();
@@ -100,7 +105,6 @@ exports.ScrapEmails = catchAsyncError(async (req, res, next) => {
 
             if (isContactFormPage(pageUrl, html)) {
                 contactFormUrls.push(pageUrl);
-                console.log(contactFormUrls);
                 console.log(`Contact form detected: ${pageUrl}`);
             }
 
@@ -144,6 +148,16 @@ exports.ScrapEmails = catchAsyncError(async (req, res, next) => {
         }
     });
 
+    // Add error handler for crawler
+    crawler.on('error', function (error) {
+        console.error("Crawler error:", error);
+        errors.push(`Crawler error: ${error.message}`);
+        if (!isCompleted) {
+            sendResponse(false);
+        }
+    });
+
+    // Start the crawler
     crawler.start();
     console.log(`Started crawling: ${normalizedUrl}`);
 });

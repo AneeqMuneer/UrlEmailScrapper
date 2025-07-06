@@ -23,5 +23,5 @@ app.get('/', (req, res) => {
     res.sendFile(__dirname + '/Public/index.html');
 });
 
-app.use(middleware)
+app.use(middleware);
 module.exports = app;
