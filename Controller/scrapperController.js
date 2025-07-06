@@ -2,7 +2,7 @@ const ErrorHandler = require("../Utils/errorHandler");
 const catchAsyncError = require("../Middleware/asyncError");
 const Crawler = require('simplecrawler');
 
-const { isValidEmail , emailRegex } = require("../Utils/scrapperUtils");
+const { isValidEmail, emailRegex } = require("../Utils/scrapperUtils");
 
 exports.ScrapEmails = catchAsyncError(async (req, res, next) => {
     const { Url } = req.body;
@@ -16,9 +16,11 @@ exports.ScrapEmails = catchAsyncError(async (req, res, next) => {
         normalizedUrl = 'https://' + Url;
     }
 
-    const emails = new Set();
+    const emailsByPage = {};
     const pages = [];
     const errors = [];
+    let isCompleted = false;
+    let timeoutId;
 
     const exclude = ['gif', 'jpg', 'jpeg', 'png', 'ico', 'bmp', 'ogg', 'webp',
         'mp4', 'webm', 'mp3', 'ttf', 'woff', 'json', 'rss', 'atom', 'gz', 'zip',
@@ -38,6 +40,48 @@ exports.ScrapEmails = catchAsyncError(async (req, res, next) => {
         return !parsedURL.path.match(regex);
     });
 
+    // Function to send response
+    const sendResponse = (isComplete = false) => {
+        if (isCompleted) return; // Prevent multiple responses
+
+        isCompleted = true;
+        clearTimeout(timeoutId);
+
+        // Calculate total emails across all pages
+        const totalEmails = Object.values(emailsByPage).reduce((total, emails) => total + emails.length, 0);
+
+        // Filter out pages with no emails
+        const emailsByPageFiltered = {};
+        Object.keys(emailsByPage).forEach(url => {
+            if (emailsByPage[url].length > 0) {
+                emailsByPageFiltered[url] = emailsByPage[url];
+            }
+        });
+
+        const message = isComplete
+            ? `Successfully scraped ${pages.length} pages and found ${totalEmails} total emails`
+            : `Website couldn't be scraped completely. Found ${totalEmails} emails from ${pages.length} pages so far`;
+
+        res.status(200).json({
+            success: true,
+            data: {
+                totalPages: pages.length,
+                totalEmails: totalEmails,
+                emailsByPage: emailsByPageFiltered,
+                errors: errors,
+                isComplete: isComplete
+            },
+            message: message
+        });
+    };
+
+    // Set timeout for 1 minute (60000ms)
+    timeoutId = setTimeout(() => {
+        if (!isCompleted) {
+            sendResponse(false);
+        }
+    }, 60000);
+
     crawler.on('fetchcomplete', function (item, responseBuffer, response) {
         try {
             const html = responseBuffer.toString();
@@ -45,16 +89,25 @@ exports.ScrapEmails = catchAsyncError(async (req, res, next) => {
 
             pages.push(pageUrl);
 
+            // Extract emails from HTML content
             const foundEmails = html.match(emailRegex);
             if (foundEmails) {
+                // Filter and store unique emails for this page
+                const pageEmails = new Set();
                 foundEmails.forEach(email => {
                     if (isValidEmail(email)) {
-                        emails.add(email.toLowerCase());
+                        pageEmails.add(email.toLowerCase());
                     }
                 });
+
+                // Only store if emails were found
+                const emailArray = Array.from(pageEmails);
+                if (emailArray.length > 0) {
+                    emailsByPage[pageUrl] = emailArray;
+                }
             }
 
-            console.log(`Scraped: ${pageUrl} - Found ${foundEmails ? foundEmails.length : 0} emails`);
+            console.log(`Scraped: ${pageUrl} - Found ${foundEmails ? emailsByPage[pageUrl]?.length || 0 : 0} emails`);
         } catch (error) {
             errors.push(`Error processing ${item.url}: ${error.message}`);
         }
@@ -69,19 +122,9 @@ exports.ScrapEmails = catchAsyncError(async (req, res, next) => {
     });
 
     crawler.on('complete', function () {
-        const emailArray = Array.from(emails);
-
-        res.status(200).json({
-            success: true,
-            data: {
-                totalPages: pages.length,
-                totalEmails: emailArray.length,
-                emails: emailArray,
-                pages: pages,
-                errors: errors
-            },
-            message: `Successfully scraped ${pages.length} pages and found ${emailArray.length} unique emails`
-        });
+        if (!isCompleted) {
+            sendResponse(true);
+        }
     });
 
     crawler.start();
