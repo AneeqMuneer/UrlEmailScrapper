@@ -1003,44 +1003,47 @@
         let resultsHTML = "";
         let hasAnyResults = false;
 
+        let websiteIndex = 0;
         Object.entries(data).forEach(([url, websiteData]) => {
-          // Extract domain name for display
           const domain = url
             .replace(/^https?:\/\//, "")
             .replace(/^www\./, "")
             .split("/")[0];
 
-          // Count unique emails for this website
           const uniqueEmails = new Set();
           Object.values(websiteData.emailsByPage).forEach((emails) => {
             emails.forEach((email) => uniqueEmails.add(email));
           });
 
-          // Create website section
+          // Collapsible section: unique id for each website
+          const sectionId = `website-details-${websiteIndex}`;
+          const chevronId = `chevron-${websiteIndex}`;
+          const websiteDivId = `website-section-${websiteIndex}`;
+
           resultsHTML += `
-            <div class="website-section" style="margin-bottom: 40px; border-left: 4px solid #00ffff; padding-left: 20px; background: rgba(10, 10, 10, 0.3); border-radius: 0 10px 10px 0; padding: 20px;">
-              <h3 class="website-title" style="color: #00ffff; font-size: 1.4rem; margin-bottom: 15px; text-shadow: 0 0 10px rgba(0, 255, 255, 0.5); display: flex; align-items: center; gap: 10px;">
+            <div class="website-section" id="${websiteDivId}" style="margin-bottom: 40px; border-left: 4px solid #00ffff; padding-left: 20px; background: rgba(10, 10, 10, 0.3); border-radius: 0 10px 10px 0; padding: 20px; position: relative;">
+              <div class="website-title" style="color: #00ffff; font-size: 1.4rem; margin-bottom: 15px; text-shadow: 0 0 10px rgba(0, 255, 255, 0.5); display: flex; align-items: center; gap: 10px; cursor: pointer; user-select: none;" onclick="toggleWebsiteDetails('${sectionId}', '${chevronId}')">
                 <i class="fas fa-globe" style="color: #ff00ff;"></i>
                 ${domain}
-              </h3>
-              
-              <div class="website-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; margin-bottom: 20px; padding: 15px; background: rgba(20, 20, 20, 0.5); border-radius: 8px;">
-                <div style="text-align: center;">
-                  <div style="font-size: 1.5rem; font-weight: bold; color: #00ffff;">${websiteData.totalPages}</div>
-                  <div style="color: #888; font-size: 0.8rem;">Pages</div>
-                </div>
-                <div style="text-align: center;">
-                  <div style="font-size: 1.5rem; font-weight: bold; color: #00ffff;">${uniqueEmails.size}</div>
-                  <div style="color: #888; font-size: 0.8rem;">Emails</div>
-                </div>
-                <div style="text-align: center;">
-                  <div style="font-size: 1.5rem; font-weight: bold; color: #00ffff;">${websiteData.totalContactForms}</div>
-                  <div style="color: #888; font-size: 0.8rem;">Forms</div>
-                </div>
+                <span id="${chevronId}" style="margin-left: auto; transition: transform 0.3s; display: flex; align-items: center;"><i class="fas fa-chevron-down"></i></span>
               </div>
+              <div id="${sectionId}" class="website-details" style="transition: max-height 0.4s cubic-bezier(0.4,0,0.2,1); overflow: hidden; max-height: 2000px;">
+                <div class="website-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; margin-bottom: 20px; padding: 15px; background: rgba(20, 20, 20, 0.5); border-radius: 8px;">
+                  <div style="text-align: center;">
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #00ffff;">${websiteData.totalPages}</div>
+                    <div style="color: #888; font-size: 0.8rem;">Pages</div>
+                  </div>
+                  <div style="text-align: center;">
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #00ffff;">${uniqueEmails.size}</div>
+                    <div style="color: #888; font-size: 0.8rem;">Emails</div>
+                  </div>
+                  <div style="text-align: center;">
+                    <div style="font-size: 1.5rem; font-weight: bold; color: #00ffff;">${websiteData.totalContactForms}</div>
+                    <div style="color: #888; font-size: 0.8rem;">Forms</div>
+                  </div>
+                </div>
           `;
 
-          // Add emails section if emails found
           if (uniqueEmails.size > 0) {
             resultsHTML += `
               <div class="result-section" style="margin-bottom: 20px;">
@@ -1049,7 +1052,6 @@
                 </h4>
                 <div class="email-list" style="background: rgba(10, 10, 10, 0.8); border: 1px solid #333; border-radius: 8px; padding: 15px; max-height: 200px; overflow-y: auto;">
             `;
-
             Array.from(uniqueEmails).forEach((email) => {
               resultsHTML += `
                 <div class="email-item" style="background: rgba(20, 20, 20, 0.8); padding: 8px 12px; margin-bottom: 6px; border-radius: 6px; border-left: 3px solid #00ffff; display: flex; align-items: center; gap: 8px; color: #fff;">
@@ -1058,14 +1060,12 @@
                 </div>
               `;
             });
-
             resultsHTML += `
                 </div>
               </div>
             `;
           }
 
-          // Add contact forms section if forms found
           if (
             websiteData.contactFormUrls &&
             websiteData.contactFormUrls.length > 0
@@ -1077,7 +1077,6 @@
                 </h4>
                 <div class="contact-list" style="background: rgba(10, 10, 10, 0.8); border: 1px solid #333; border-radius: 8px; padding: 15px; max-height: 200px; overflow-y: auto;">
             `;
-
             websiteData.contactFormUrls.forEach((contactUrl) => {
               resultsHTML += `
                 <div class="contact-item" style="background: rgba(20, 20, 20, 0.8); padding: 8px 12px; margin-bottom: 6px; border-radius: 6px; border-left: 3px solid #00ffff; display: flex; align-items: center; gap: 8px;">
@@ -1086,16 +1085,13 @@
                 </div>
               `;
             });
-
             resultsHTML += `
                 </div>
               </div>
             `;
           }
 
-          // Close website section
-          resultsHTML += `</div>`;
-
+          resultsHTML += `</div></div>`;
           if (
             uniqueEmails.size > 0 ||
             (websiteData.contactFormUrls &&
@@ -1103,22 +1099,34 @@
           ) {
             hasAnyResults = true;
           }
+          websiteIndex++;
         });
 
-        // If no results found across all websites
         if (!hasAnyResults) {
           resultsHTML =
             '<div class="no-results" style="text-align: center; color: #666; font-style: italic; padding: 40px;">No emails or contact forms found on any of the websites</div>';
         }
 
-        // Update the results container
         results.innerHTML = resultsHTML;
         results.style.display = "block";
 
-        // Show download button if there are any results
         if (hasAnyResults) {
           downloadBtn.style.display = "inline-block";
         }
+
+        // Add collapsible and close logic after rendering
+        window.toggleWebsiteDetails = function (sectionId, chevronId) {
+          const details = document.getElementById(sectionId);
+          const chevron = document.getElementById(chevronId).querySelector("i");
+          if (!details) return;
+          if (details.style.maxHeight === "0px") {
+            details.style.maxHeight = "2000px";
+            chevron.style.transform = "rotate(0deg)";
+          } else {
+            details.style.maxHeight = "0px";
+            chevron.style.transform = "rotate(-90deg)";
+          }
+        };
       }
 
       // Download button click handler
