@@ -726,6 +726,9 @@
       // Close popup
       popupClose.addEventListener("click", function () {
         popup.style.display = "none";
+        if (window.popupTimeout) {
+          clearTimeout(window.popupTimeout);
+        }
       });
 
       // Scrape button click handler for single URL
@@ -907,6 +910,20 @@
         popupMessage.textContent = updatedMessage;
 
         popup.style.display = "block";
+
+        // --- Fade out popup after 5 seconds ---
+        if (window.popupTimeout) {
+          clearTimeout(window.popupTimeout);
+        }
+        window.popupTimeout = setTimeout(() => {
+          popup.style.transition = "opacity 0.5s";
+          popup.style.opacity = "0";
+          setTimeout(() => {
+            popup.style.display = "none";
+            popup.style.opacity = "";
+            popup.style.transition = "";
+          }, 500);
+        }, 5000);
       }
 
       function updateStats(data) {
