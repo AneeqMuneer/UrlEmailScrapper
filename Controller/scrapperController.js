@@ -5,23 +5,18 @@ const Crawler = require('simplecrawler');
 const { isValidEmail, emailRegex, isContactFormPage } = require("../Utils/scrapperUtils");
 
 exports.ScrapEmails = catchAsyncError(async (req, res, next) => {
-    const { Url } = req.body;
+    const { Urls } = req.body;
 
-    if (!Url) {
-        return next(new ErrorHandler("URL is required", 400));
+    if (Urls.length === 0) {
+        return next(new ErrorHandler("URLs are required", 400));
     }
 
-    let normalizedUrl = Url;
-    if (!Url.startsWith('https://')) {
-        normalizedUrl = 'https://' + Url;
-    }
-
-    const emailsByPage = {};
-    const pages = [];
-    const contactFormUrls = [];
-    const errors = [];
-    let isCompleted = false;
-    let crawler;
+    const normalizedUrls = Urls.map(url => {
+        if (!url.startsWith('https://')) {
+            return 'https://' + url;
+        }
+        return url;
+    });
 
     const exclude = ['gif', 'jpg', 'jpeg', 'png', 'ico', 'bmp', 'ogg', 'webp',
         'mp4', 'webm', 'mp3', 'ttf', 'woff', 'json', 'rss', 'atom', 'gz', 'zip',
@@ -30,48 +25,152 @@ exports.ScrapEmails = catchAsyncError(async (req, res, next) => {
     const exts = exclude.join('|');
     const regex = new RegExp('\\.(' + exts + ')', 'i');
 
-    crawler = new Crawler(normalizedUrl);
+    const results = {};
+    let completedUrls = 0;
+    const totalUrls = normalizedUrls.length;
 
-    crawler.maxDepth = 3;
-    crawler.maxConcurrency = 5;
-    crawler.respectRobotsTxt = true;
-    crawler.userAgent = 'EmailScraper/1.0';
+    const processUrl = (url) => {
+        return new Promise((resolve) => {
+            const emailsByPage = {};
+            const pages = [];
+            const contactFormUrls = [];
+            const errors = [];
+            let isCompleted = false;
+            let crawler;
 
-    crawler.addFetchCondition(function (parsedURL) {
-        return !parsedURL.path.match(regex);
-    });
+            crawler = new Crawler(url);
 
-    const sendResponse = (isComplete = false) => {
-        if (isCompleted) return;
+            crawler.maxDepth = 3;
+            crawler.maxConcurrency = 5;
+            crawler.respectRobotsTxt = true;
+            crawler.userAgent = 'EmailScraper/1.0';
 
-        isCompleted = true;
+            crawler.addFetchCondition(function (parsedURL) {
+                return !parsedURL.path.match(regex);
+            });
 
-        // Force stop the crawler
-        if (crawler) {
-            try {
-                crawler.stop();
-                console.log("Crawler stopped");
-            } catch (error) {
-                console.error("Error stopping crawler:", error);
-            }
-        }
+            const sendResponse = (isComplete = false) => {
+                if (isCompleted) return;
 
-        const totalEmails = Object.values(emailsByPage).reduce((total, emails) => total + emails.length, 0);
+                isCompleted = true;
 
-        const emailsByPageFiltered = {};
-        Object.keys(emailsByPage).forEach(url => {
-            if (emailsByPage[url].length > 0) {
-                emailsByPageFiltered[url] = emailsByPage[url];
-            }
+                // Force stop the crawler
+                if (crawler) {
+                    try {
+                        crawler.stop();
+                        console.log(`Crawler stopped for ${url}`);
+                    } catch (error) {
+                        console.error(`Error stopping crawler for ${url}:`, error);
+                    }
+                }
+
+                const totalEmails = Object.values(emailsByPage).reduce((total, emails) => total + emails.length, 0);
+
+                const emailsByPageFiltered = {};
+                Object.keys(emailsByPage).forEach(pageUrl => {
+                    if (emailsByPage[pageUrl].length > 0) {
+                        emailsByPageFiltered[pageUrl] = emailsByPage[pageUrl];
+                    }
+                });
+
+                const message = isComplete
+                    ? `Successfully scraped ${pages.length} pages and found ${totalEmails} total emails`
+                    : `Website couldn't be scraped completely. Found ${totalEmails} emails from ${pages.length} pages so far`;
+
+                console.log(`Sending response for ${url}: ${message}`);
+                console.log(`Pages scanned for ${url}: ${pages.join(', ')}`);
+                console.log(`Contact forms found for ${url}: ${contactFormUrls.join(', ')}`);
+
+                results[url] = {
+                    totalPages: pages.length,
+                    totalEmails: totalEmails,
+                    emailsByPage: emailsByPageFiltered,
+                    contactFormUrls: contactFormUrls,
+                    totalContactForms: contactFormUrls.length,
+                    scannedPages: pages,
+                    errors: errors,
+                    isComplete: isComplete
+                };
+
+                completedUrls++;
+                resolve();
+            };
+
+            crawler.on('fetchcomplete', function (item, responseBuffer, response) {
+                try {
+                    const html = responseBuffer.toString();
+                    const pageUrl = item.url;
+
+                    pages.push(pageUrl);
+                    console.log(`Scanned page for ${url}: ${pageUrl}`);
+
+                    if (isContactFormPage(pageUrl, html)) {
+                        contactFormUrls.push(pageUrl);
+                        console.log(`Contact form detected for ${url}: ${pageUrl}`);
+                    }
+
+                    const foundEmails = html.match(emailRegex);
+                    if (foundEmails) {
+                        const pageEmails = new Set();
+                        foundEmails.forEach(email => {
+                            if (isValidEmail(email)) {
+                                pageEmails.add(email.toLowerCase());
+                            }
+                        });
+
+                        const emailArray = Array.from(pageEmails);
+                        if (emailArray.length > 0) {
+                            emailsByPage[pageUrl] = emailArray;
+                            console.log(`Emails found on ${pageUrl} for ${url}: ${emailArray.join(', ')}`);
+                        }
+                    }
+
+                    console.log(`Processed for ${url}: ${pageUrl} - Found ${foundEmails ? emailsByPage[pageUrl]?.length || 0 : 0} emails`);
+                } catch (error) {
+                    console.error(`Error processing ${item.url} for ${url}:`, error.message);
+                    errors.push(`Error processing ${item.url}: ${error.message}`);
+                }
+            });
+
+            crawler.on('fetchclienterror', function (queueItem, response) {
+                console.error(`Client error for ${queueItem.url} (${url}):`, response);
+                errors.push(`Client error for ${queueItem.url}: ${response}`);
+            });
+
+            crawler.on('fetcherror', function (queueItem, response) {
+                console.error(`Fetch error for ${queueItem.url} (${url}):`, response);
+                errors.push(`Fetch error for ${queueItem.url}: ${response}`);
+            });
+
+            crawler.on('complete', function () {
+                console.log(`Crawler completed naturally for ${url}`);
+                if (!isCompleted) {
+                    sendResponse(true);
+                }
+            });
+
+            // Add error handler for crawler
+            crawler.on('error', function (error) {
+                console.error(`Crawler error for ${url}:`, error);
+                errors.push(`Crawler error: ${error.message}`);
+                if (!isCompleted) {
+                    sendResponse(false);
+                }
+            });
+
+            // Start the crawler
+            crawler.start();
+            console.log(`Started crawling: ${url}`);
         });
+    };
 
-        const message = isComplete
-            ? `Successfully scraped ${pages.length} pages and found ${totalEmails} total emails`
-            : `Website couldn't be scraped completely. Found ${totalEmails} emails from ${pages.length} pages so far`;
+    // Process all URLs concurrently
+    const promises = normalizedUrls.map(url => processUrl(url));
 
-        console.log(`Sending response: ${message}`);
-        console.log(`Pages scanned: ${pages.join(', ')}`);
-        console.log(`Contact forms found: ${contactFormUrls.join(', ')}`);
+    try {
+        await Promise.all(promises);
+
+        console.log(`All URLs processed. Completed: ${completedUrls}/${totalUrls}`);
 
         // Check if response has already been sent
         if (res.headersSent) {
@@ -81,83 +180,17 @@ exports.ScrapEmails = catchAsyncError(async (req, res, next) => {
 
         res.status(200).json({
             success: true,
-            data: {
-                totalPages: pages.length,
-                totalEmails: totalEmails,
-                emailsByPage: emailsByPageFiltered,
-                contactFormUrls: contactFormUrls,
-                totalContactForms: contactFormUrls.length,
-                scannedPages: pages,
-                errors: errors,
-                isComplete: isComplete
-            },
-            message: message
+            data: results,
+            message: `Successfully processed ${completedUrls} URLs`
         });
-    };
-
-    crawler.on('fetchcomplete', function (item, responseBuffer, response) {
-        try {
-            const html = responseBuffer.toString();
-            const pageUrl = item.url;
-
-            pages.push(pageUrl);
-            console.log(`Scanned page: ${pageUrl}`);
-
-            if (isContactFormPage(pageUrl, html)) {
-                contactFormUrls.push(pageUrl);
-                console.log(`Contact form detected: ${pageUrl}`);
-            }
-
-            const foundEmails = html.match(emailRegex);
-            if (foundEmails) {
-                const pageEmails = new Set();
-                foundEmails.forEach(email => {
-                    if (isValidEmail(email)) {
-                        pageEmails.add(email.toLowerCase());
-                    }
-                });
-
-                const emailArray = Array.from(pageEmails);
-                if (emailArray.length > 0) {
-                    emailsByPage[pageUrl] = emailArray;
-                    console.log(`Emails found on ${pageUrl}: ${emailArray.join(', ')}`);
-                }
-            }
-
-            console.log(`Processed: ${pageUrl} - Found ${foundEmails ? emailsByPage[pageUrl]?.length || 0 : 0} emails`);
-        } catch (error) {
-            console.error(`Error processing ${item.url}:`, error.message);
-            errors.push(`Error processing ${item.url}: ${error.message}`);
+    } catch (error) {
+        console.error("Error processing URLs:", error);
+        if (!res.headersSent) {
+            res.status(500).json({
+                success: false,
+                message: "Error processing URLs",
+                error: error.message
+            });
         }
-    });
-
-    crawler.on('fetchclienterror', function (queueItem, response) {
-        console.error(`Client error for ${queueItem.url}:`, response);
-        errors.push(`Client error for ${queueItem.url}: ${response}`);
-    });
-
-    crawler.on('fetcherror', function (queueItem, response) {
-        console.error(`Fetch error for ${queueItem.url}:`, response);
-        errors.push(`Fetch error for ${queueItem.url}: ${response}`);
-    });
-
-    crawler.on('complete', function () {
-        console.log("Crawler completed naturally");
-        if (!isCompleted) {
-            sendResponse(true);
-        }
-    });
-
-    // Add error handler for crawler
-    crawler.on('error', function (error) {
-        console.error("Crawler error:", error);
-        errors.push(`Crawler error: ${error.message}`);
-        if (!isCompleted) {
-            sendResponse(false);
-        }
-    });
-
-    // Start the crawler
-    crawler.start();
-    console.log(`Started crawling: ${normalizedUrl}`);
+    }
 });

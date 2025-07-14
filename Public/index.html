@@ -83,6 +83,57 @@
         text-shadow: 0 0 10px rgba(0, 255, 255, 0.5);
       }
 
+      .search-mode-tabs {
+        display: flex;
+        justify-content: center;
+        margin-bottom: 30px;
+        gap: 30px;
+      }
+
+      .tab-btn {
+        padding: 10px 30px;
+        border-radius: 8px;
+        border: none;
+        background: #222;
+        color: #fff;
+        font-weight: bold;
+        cursor: pointer;
+        font-family: "Courier New", monospace;
+        letter-spacing: 1px;
+        box-shadow: 0 0 10px #00ffff;
+      }
+
+      .tab-btn.active {
+        background: linear-gradient(45deg, #00ffff, #ff00ff);
+        color: #000;
+      }
+
+      /* File input styling */
+      #csvInput::file-selector-button {
+        background: linear-gradient(45deg, #00ffff, #ff00ff);
+        color: #000;
+        border: none;
+        border-radius: 8px;
+        padding: 8px 16px;
+        font-family: "Courier New", monospace;
+        font-weight: bold;
+        cursor: pointer;
+        margin-right: 10px;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        transition: all 0.3s ease;
+      }
+
+      #csvInput::file-selector-button:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 0 20px rgba(0, 255, 255, 0.5);
+      }
+
+      #csvInput:hover {
+        border-color: #00ffff;
+        box-shadow: 0 0 20px rgba(0, 255, 255, 0.3);
+      }
+
       .search-container {
         display: flex;
         gap: 15px;
@@ -478,7 +529,11 @@
       <div class="logo"><i class="fas fa-envelope"></i> EMAIL SCRAPER</div>
       <p class="subtitle">Find emails and contact forms from any website</p>
 
-      <div class="search-container">
+      <div class="search-mode-tabs">
+        <button id="tabSingle" class="tab-btn active">Single URL</button>
+        <button id="tabCSV" class="tab-btn">Upload CSV</button>
+      </div>
+      <div class="search-container" id="searchContainerSingle">
         <input
           type="text"
           class="search-input"
@@ -486,6 +541,34 @@
           id="urlInput"
         />
         <button class="scrape-btn" id="scrapeBtn">
+          <i class="fas fa-search"></i> SCRAPE
+        </button>
+      </div>
+      <div
+        class="search-container"
+        id="searchContainerCSV"
+        style="display: none; align-items: center; justify-content: center"
+      >
+        <input
+          type="file"
+          id="csvInput"
+          accept=".csv"
+          style="
+            flex: 1;
+            max-width: 400px;
+            background: rgba(10, 10, 10, 0.8);
+            color: #fff;
+            border: 2px solid #333;
+            border-radius: 10px;
+            padding: 15px 20px;
+            font-family: 'Courier New', monospace;
+            font-size: 1rem;
+            outline: none;
+            transition: all 0.3s ease;
+            cursor: pointer;
+          "
+        />
+        <button class="scrape-btn" id="scrapeBtnCSV">
           <i class="fas fa-search"></i> SCRAPE
         </button>
       </div>
@@ -563,9 +646,73 @@
       const popup = document.getElementById("popup");
       const popupClose = document.getElementById("popupClose");
       const downloadBtn = document.getElementById("downloadBtn");
+      const tabSingle = document.getElementById("tabSingle");
+      const tabCSV = document.getElementById("tabCSV");
+      const searchContainerSingle = document.getElementById(
+        "searchContainerSingle"
+      );
+      const searchContainerCSV = document.getElementById("searchContainerCSV");
+      const csvInput = document.getElementById("csvInput");
+      const scrapeBtnCSV = document.getElementById("scrapeBtnCSV");
+      let csvUrls = [];
 
       // Global variable to store the current AbortController
       let currentController = null;
+
+      // Tab switching logic
+      tabSingle.addEventListener("click", function () {
+        tabSingle.classList.add("active");
+        tabCSV.classList.remove("active");
+        searchContainerSingle.style.display = "flex";
+        searchContainerCSV.style.display = "none";
+      });
+      tabCSV.addEventListener("click", function () {
+        tabCSV.classList.add("active");
+        tabSingle.classList.remove("active");
+        searchContainerSingle.style.display = "none";
+        searchContainerCSV.style.display = "flex";
+      });
+
+      // CSV file validation and parsing
+      csvInput.addEventListener("change", function (e) {
+        const file = e.target.files[0];
+        if (!file) return;
+        if (file.type !== "text/csv" && !file.name.endsWith(".csv")) {
+          showPopup(
+            false,
+            "File type not supported. Please upload a CSV file.",
+            null
+          );
+          csvInput.value = "";
+          csvUrls = [];
+          scrapeBtnCSV.classList.remove("active");
+          return;
+        }
+        // Read and parse CSV
+        const reader = new FileReader();
+        reader.onload = function (evt) {
+          const text = evt.target.result;
+          // Parse CSV: split by newlines, trim, filter empty, and normalize URLs
+          csvUrls = text
+            .split(/\r?\n/)
+            .map((line) => line.trim())
+            .filter((line) => line)
+            .map((url) => {
+              // Normalize URLs (add https:// if missing)
+              if (!url.startsWith("https://") && !url.startsWith("http://")) {
+                return "https://" + url;
+              }
+              return url;
+            });
+          if (csvUrls.length > 0) {
+            scrapeBtnCSV.classList.add("active");
+            console.log(`Parsed ${csvUrls.length} URLs from CSV`);
+          } else {
+            scrapeBtnCSV.classList.remove("active");
+          }
+        };
+        reader.readAsText(file);
+      });
 
       // Enable/disable scrape button based on input
       urlInput.addEventListener("input", function () {
@@ -581,7 +728,7 @@
         popup.style.display = "none";
       });
 
-      // Scrape button click handler
+      // Scrape button click handler for single URL
       scrapeBtn.addEventListener("click", async function () {
         const url = urlInput.value.trim();
         if (!url) return;
@@ -612,25 +759,45 @@
             headers: {
               "Content-Type": "application/json",
             },
-            body: JSON.stringify({ Url: url }),
+            body: JSON.stringify({ Urls: [url] }),
             signal: currentController.signal,
           });
 
           const data = await response.json();
+
+          // Debug logging
+          console.log("Backend response:", data);
+          console.log("URL being processed:", url);
+          console.log("Data structure:", data.data);
 
           // Hide loader and reset button
           loader.style.display = "none";
           scrapeBtn.classList.remove("cancelling");
           scrapeBtn.innerHTML = '<i class="fas fa-search"></i> SCRAPE';
 
-          // Show popup based on completion status
-          showPopup(data.data.isComplete, data.message, data.data);
+          if (data.success) {
+            // For single URL, extract the data for that URL
+            const urlData = data.data[url];
+            if (urlData) {
+              // Show popup based on completion status
+              showPopup(urlData.isComplete, data.message, urlData);
 
-          // Update stats with unique email count
-          updateStats(data.data);
+              // Update stats with unique email count
+              updateStats(urlData);
 
-          // Show results
-          displayResults(data.data);
+              // Show results
+              displayResults(urlData);
+            } else {
+              showPopup(false, "No data found for this website.", null);
+            }
+          } else {
+            showPopup(
+              false,
+              data.message ||
+                "An error occurred while scraping emails from this website.",
+              null
+            );
+          }
         } catch (error) {
           console.error("Error:", error);
 
@@ -652,6 +819,64 @@
               null
             );
           }
+        }
+      });
+
+      // Scrape button click handler for CSV
+      scrapeBtnCSV.addEventListener("click", async function () {
+        if (!csvUrls.length) return;
+        // Show loader and transform button to cancel
+        loader.style.display = "block";
+        results.style.display = "none";
+        stats.style.display = "none";
+        downloadBtn.style.display = "none";
+        scrapeBtnCSV.classList.add("cancelling");
+        scrapeBtnCSV.innerHTML = '<i class="fas fa-times"></i> CANCEL';
+        // Create AbortController for cancellation
+        currentController = new AbortController();
+        try {
+          const response = await fetch("/Scrapper/ScrapEmails", {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({ Urls: csvUrls }),
+            signal: currentController.signal,
+          });
+          const data = await response.json();
+
+          // Debug logging for CSV
+          console.log("CSV Backend response:", data);
+          console.log("CSV URLs processed:", csvUrls);
+          console.log("CSV Data structure:", data.data);
+
+          // Hide loader and reset button
+          loader.style.display = "none";
+          scrapeBtnCSV.classList.remove("cancelling");
+          scrapeBtnCSV.innerHTML = '<i class="fas fa-search"></i> SCRAPE';
+          if (data.success) {
+            // Show popup based on completion status
+            showPopup(true, data.message, null);
+            // Update stats and display results for multi-website
+            updateStatsMultiWebsite(data.data);
+            displayResultsMultiWebsite(data.data);
+          } else {
+            showPopup(
+              false,
+              data.message ||
+                "An error occurred while scraping emails from these websites.",
+              null
+            );
+          }
+        } catch (error) {
+          loader.style.display = "none";
+          scrapeBtnCSV.classList.remove("cancelling");
+          scrapeBtnCSV.innerHTML = '<i class="fas fa-search"></i> SCRAPE';
+          showPopup(
+            false,
+            "An error occurred while scraping emails from these websites.",
+            null
+          );
         }
       });
 
@@ -745,6 +970,153 @@
           uniqueEmails.size > 0 ||
           (data.contactFormUrls && data.contactFormUrls.length > 0)
         ) {
+          downloadBtn.style.display = "inline-block";
+        }
+      }
+
+      function updateStatsMultiWebsite(data) {
+        // Calculate totals across all websites
+        let totalPages = 0;
+        let totalEmails = 0;
+        let totalContactForms = 0;
+        const allUniqueEmails = new Set();
+
+        Object.values(data).forEach((websiteData) => {
+          totalPages += websiteData.totalPages;
+          totalContactForms += websiteData.totalContactForms;
+
+          // Count unique emails across all websites
+          Object.values(websiteData.emailsByPage).forEach((emails) => {
+            emails.forEach((email) => allUniqueEmails.add(email));
+          });
+        });
+
+        totalEmails = allUniqueEmails.size;
+
+        document.getElementById("pagesScanned").textContent = totalPages;
+        document.getElementById("emailsFound").textContent = totalEmails;
+        document.getElementById("contactForms").textContent = totalContactForms;
+        stats.style.display = "block";
+      }
+
+      function displayResultsMultiWebsite(data) {
+        let resultsHTML = "";
+        let hasAnyResults = false;
+
+        Object.entries(data).forEach(([url, websiteData]) => {
+          // Extract domain name for display
+          const domain = url
+            .replace(/^https?:\/\//, "")
+            .replace(/^www\./, "")
+            .split("/")[0];
+
+          // Count unique emails for this website
+          const uniqueEmails = new Set();
+          Object.values(websiteData.emailsByPage).forEach((emails) => {
+            emails.forEach((email) => uniqueEmails.add(email));
+          });
+
+          // Create website section
+          resultsHTML += `
+            <div class="website-section" style="margin-bottom: 40px; border-left: 4px solid #00ffff; padding-left: 20px; background: rgba(10, 10, 10, 0.3); border-radius: 0 10px 10px 0; padding: 20px;">
+              <h3 class="website-title" style="color: #00ffff; font-size: 1.4rem; margin-bottom: 15px; text-shadow: 0 0 10px rgba(0, 255, 255, 0.5); display: flex; align-items: center; gap: 10px;">
+                <i class="fas fa-globe" style="color: #ff00ff;"></i>
+                ${domain}
+              </h3>
+              
+              <div class="website-stats" style="display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); gap: 15px; margin-bottom: 20px; padding: 15px; background: rgba(20, 20, 20, 0.5); border-radius: 8px;">
+                <div style="text-align: center;">
+                  <div style="font-size: 1.5rem; font-weight: bold; color: #00ffff;">${websiteData.totalPages}</div>
+                  <div style="color: #888; font-size: 0.8rem;">Pages</div>
+                </div>
+                <div style="text-align: center;">
+                  <div style="font-size: 1.5rem; font-weight: bold; color: #00ffff;">${uniqueEmails.size}</div>
+                  <div style="color: #888; font-size: 0.8rem;">Emails</div>
+                </div>
+                <div style="text-align: center;">
+                  <div style="font-size: 1.5rem; font-weight: bold; color: #00ffff;">${websiteData.totalContactForms}</div>
+                  <div style="color: #888; font-size: 0.8rem;">Forms</div>
+                </div>
+              </div>
+          `;
+
+          // Add emails section if emails found
+          if (uniqueEmails.size > 0) {
+            resultsHTML += `
+              <div class="result-section" style="margin-bottom: 20px;">
+                <h4 class="section-title" style="font-size: 1.1rem; margin-bottom: 10px; color: #00ffff;">
+                  <i class="fas fa-envelope"></i> Emails Found
+                </h4>
+                <div class="email-list" style="background: rgba(10, 10, 10, 0.8); border: 1px solid #333; border-radius: 8px; padding: 15px; max-height: 200px; overflow-y: auto;">
+            `;
+
+            Array.from(uniqueEmails).forEach((email) => {
+              resultsHTML += `
+                <div class="email-item" style="background: rgba(20, 20, 20, 0.8); padding: 8px 12px; margin-bottom: 6px; border-radius: 6px; border-left: 3px solid #00ffff; display: flex; align-items: center; gap: 8px; color: #fff;">
+                  <i class="fas fa-envelope" style="color: #ff00ff;"></i>
+                  <span>${email}</span>
+                </div>
+              `;
+            });
+
+            resultsHTML += `
+                </div>
+              </div>
+            `;
+          }
+
+          // Add contact forms section if forms found
+          if (
+            websiteData.contactFormUrls &&
+            websiteData.contactFormUrls.length > 0
+          ) {
+            resultsHTML += `
+              <div class="result-section" style="margin-bottom: 20px;">
+                <h4 class="section-title" style="font-size: 1.1rem; margin-bottom: 10px; color: #00ffff;">
+                  <i class="fas fa-address-book"></i> Contact Form URLs
+                </h4>
+                <div class="contact-list" style="background: rgba(10, 10, 10, 0.8); border: 1px solid #333; border-radius: 8px; padding: 15px; max-height: 200px; overflow-y: auto;">
+            `;
+
+            websiteData.contactFormUrls.forEach((contactUrl) => {
+              resultsHTML += `
+                <div class="contact-item" style="background: rgba(20, 20, 20, 0.8); padding: 8px 12px; margin-bottom: 6px; border-radius: 6px; border-left: 3px solid #00ffff; display: flex; align-items: center; gap: 8px;">
+                  <i class="fas fa-address-book" style="color: #ff00ff;"></i>
+                  <a href="${contactUrl}" target="_blank" style="color: #00ffff; text-decoration: none;">${contactUrl}</a>
+                </div>
+              `;
+            });
+
+            resultsHTML += `
+                </div>
+              </div>
+            `;
+          }
+
+          // Close website section
+          resultsHTML += `</div>`;
+
+          if (
+            uniqueEmails.size > 0 ||
+            (websiteData.contactFormUrls &&
+              websiteData.contactFormUrls.length > 0)
+          ) {
+            hasAnyResults = true;
+          }
+        });
+
+        // If no results found across all websites
+        if (!hasAnyResults) {
+          resultsHTML =
+            '<div class="no-results" style="text-align: center; color: #666; font-style: italic; padding: 40px;">No emails or contact forms found on any of the websites</div>';
+        }
+
+        // Update the results container
+        results.innerHTML = resultsHTML;
+        results.style.display = "block";
+
+        // Show download button if there are any results
+        if (hasAnyResults) {
           downloadBtn.style.display = "inline-block";
         }
       }
