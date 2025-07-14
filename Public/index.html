@@ -392,18 +392,31 @@
       /* Popup */
       .popup {
         display: none;
-        position: fixed;
-        top: 20px;
-        right: 20px;
+        /* position: relative; */
         background: rgba(20, 20, 20, 0.95);
         border: 2px solid #00ffff;
         border-radius: 10px;
         padding: 20px;
         box-shadow: 0 0 30px rgba(0, 255, 255, 0.3);
-        z-index: 1000;
         max-width: 350px;
         animation: slideIn 0.3s ease;
         backdrop-filter: blur(10px);
+        flex-direction: column;
+      }
+
+      #popupContainer {
+        position: fixed;
+        top: 20px;
+        right: 20px;
+        z-index: 1000;
+        display: flex;
+        flex-direction: column;
+        align-items: flex-end;
+        gap: 15px;
+        pointer-events: none;
+      }
+      #popupContainer .popup {
+        pointer-events: auto;
       }
 
       @keyframes slideIn {
@@ -625,15 +638,7 @@
       </div>
     </div>
 
-    <div class="popup" id="popup">
-      <div class="popup-header">
-        <div class="popup-title" id="popupTitle"></div>
-        <button class="popup-close" id="popupClose">
-          <i class="fas fa-times"></i>
-        </button>
-      </div>
-      <div class="popup-message" id="popupMessage"></div>
-    </div>
+    <div id="popupContainer"></div>
 
     <script>
       const urlInput = document.getElementById("urlInput");
@@ -720,14 +725,6 @@
           scrapeBtn.classList.add("active");
         } else {
           scrapeBtn.classList.remove("active");
-        }
-      });
-
-      // Close popup
-      popupClose.addEventListener("click", function () {
-        popup.style.display = "none";
-        if (window.popupTimeout) {
-          clearTimeout(window.popupTimeout);
         }
       });
 
@@ -884,14 +881,6 @@
       });
 
       function showPopup(isComplete, message, data) {
-        const popupTitle = document.getElementById("popupTitle");
-        const popupMessage = document.getElementById("popupMessage");
-
-        popup.className = "popup " + (isComplete ? "success" : "warning");
-        popupTitle.textContent = isComplete
-          ? "SCRAPING COMPLETE!"
-          : "PARTIAL RESULTS";
-
         // Calculate unique email count for popup message
         let uniqueEmailCount = 0;
         if (data) {
@@ -907,21 +896,46 @@
           /\d+ emails/,
           `${uniqueEmailCount} emails`
         );
-        popupMessage.textContent = updatedMessage;
 
+        // Create popup element
+        const popup = document.createElement("div");
+        popup.className = "popup " + (isComplete ? "success" : "warning");
         popup.style.display = "block";
+        popup.style.opacity = "1";
 
-        // --- Fade out popup after 5 seconds ---
-        if (window.popupTimeout) {
-          clearTimeout(window.popupTimeout);
-        }
-        window.popupTimeout = setTimeout(() => {
+        // Popup inner HTML
+        popup.innerHTML = `
+          <div class="popup-header">
+            <div class="popup-title">${
+              isComplete ? "SCRAPING COMPLETE!" : "PARTIAL RESULTS"
+            }</div>
+            <button class="popup-close" style="background: none; border: none; color: #666; font-size: 1.2rem; cursor: pointer; padding: 0; width: 20px; height: 20px; display: flex; align-items: center; justify-content: center; transition: color 0.3s ease;">
+              <i class="fas fa-times"></i>
+            </button>
+          </div>
+          <div class="popup-message">${updatedMessage}</div>
+        `;
+
+        // Add close logic for this popup
+        const closeBtn = popup.querySelector(".popup-close");
+        closeBtn.addEventListener("click", function () {
           popup.style.transition = "opacity 0.5s";
           popup.style.opacity = "0";
           setTimeout(() => {
-            popup.style.display = "none";
-            popup.style.opacity = "";
-            popup.style.transition = "";
+            popup.remove();
+          }, 500);
+        });
+
+        // Add to popup container
+        const popupContainer = document.getElementById("popupContainer");
+        popupContainer.prepend(popup);
+
+        // Fade out after 5 seconds
+        setTimeout(() => {
+          popup.style.transition = "opacity 0.5s";
+          popup.style.opacity = "0";
+          setTimeout(() => {
+            popup.remove();
           }, 500);
         }, 5000);
       }
